@@ -73,8 +73,8 @@ jobs:
                   applicationId 'com.auri16.certinstallerhelper'
                   minSdk 17
                   targetSdk 25
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '1.1'
               }
 
               compileOptions {
@@ -97,6 +97,8 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
               <application
                   android:allowBackup="false"
@@ -124,6 +126,7 @@ jobs:
           package com.auri16.certinstallerhelper;
 
           import android.app.Activity;
+          import android.app.AlertDialog;
           import android.os.Bundle;
           import android.content.Intent;
           import android.net.Uri;
@@ -133,9 +136,13 @@ jobs:
           import android.widget.LinearLayout;
           import android.widget.TextView;
 
+          import java.io.ByteArrayOutputStream;
+          import java.io.InputStream;
+
           public class MainActivity extends Activity {
 
               private static final int PICK_CERTIFICATE = 1001;
+              private static final int INSTALL_CERTIFICATE = 1002;
 
               @Override
               public void onCreate(Bundle savedInstanceState) {
@@ -152,8 +159,8 @@ jobs:
 
                   TextView info = new TextView(this);
                   info.setText(
-                      "Wybierz plik certyfikatu (.cer, .crt lub .der). " +
-                      "Plik zostanie przekazany do systemowego instalatora certyfikatów Androida."
+                      "Wybierz plik certyfikatu (.cer, .crt lub .der).\n\n" +
+                      "Certyfikat zostanie przekazany do systemowego instalatora Androida."
                   );
                   info.setTextSize(16);
                   layout.addView(info);
@@ -165,14 +172,35 @@ jobs:
                   button.setOnClickListener(new View.OnClickListener() {
                       @Override
                       public void onClick(View v) {
-                          Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                          intent.addCategory(Intent.CATEGORY_OPENABLE);
-                          intent.setType("*/*");
-                          startActivityForResult(intent, PICK_CERTIFICATE);
+                          chooseCertificate();
                       }
                   });
 
                   setContentView(layout);
+              }
+
+              private void chooseCertificate() {
+                  try {
+                      Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                      intent.addCategory(Intent.CATEGORY_OPENABLE);
+                      intent.setType("*/*");
+
+                      startActivityForResult(
+                          Intent.createChooser(
+                              intent,
+                              "Wybierz certyfikat"
+                          ),
+                          PICK_CERTIFICATE
+                      );
+
+                  } catch (Exception e) {
+                      showError(
+                          "Nie można otworzyć wyboru pliku.\n\n" +
+                          e.getClass().getSimpleName() +
+                          ": " +
+                          e.getMessage()
+                      );
+                  }
               }
 
               @Override
@@ -181,7 +209,11 @@ jobs:
                       int resultCode,
                       Intent data) {
 
-                  super.onActivityResult(requestCode, resultCode, data);
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  );
 
                   if (requestCode == PICK_CERTIFICATE &&
                       resultCode == RESULT_OK &&
@@ -189,42 +221,104 @@ jobs:
 
                       Uri uri = data.getData();
 
-                      if (uri != null) {
+                      if (uri == null) {
+                          showError("Nie wybrano pliku.");
+                          return;
+                      }
+
+                      installCertificate(uri);
+                  }
+
+                  if (requestCode == INSTALL_CERTIFICATE) {
+                      if (resultCode == RESULT_OK) {
+                          showMessage(
+                              "Certyfikat został przekazany do systemu."
+                          );
+                      }
+                  }
+              }
+
+              private void installCertificate(Uri uri) {
+                  InputStream input = null;
+
+                  try {
+                      input = getContentResolver().openInputStream(uri);
+
+                      if (input == null) {
+                          throw new Exception(
+                              "Nie można otworzyć wybranego pliku."
+                          );
+                      }
+
+                      ByteArrayOutputStream output =
+                          new ByteArrayOutputStream();
+
+                      byte[] buffer = new byte[4096];
+                      int length;
+
+                      while ((length = input.read(buffer)) != -1) {
+                          output.write(buffer, 0, length);
+                      }
+
+                      byte[] certificateBytes =
+                          output.toByteArray();
+
+                      if (certificateBytes.length == 0) {
+                          throw new Exception(
+                              "Wybrany plik jest pusty."
+                          );
+                      }
+
+                      Intent installIntent =
+                          KeyChain.createInstallIntent();
+
+                      installIntent.putExtra(
+                          KeyChain.EXTRA_CERTIFICATE,
+                          certificateBytes
+                      );
+
+                      installIntent.putExtra(
+                          KeyChain.EXTRA_NAME,
+                          "CertInstallerHelper"
+                      );
+
+                      startActivityForResult(
+                          installIntent,
+                          INSTALL_CERTIFICATE
+                      );
+
+                  } catch (Exception e) {
+                      showError(
+                          "Nie udało się odczytać certyfikatu.\n\n" +
+                          e.getClass().getSimpleName() +
+                          ": " +
+                          e.getMessage()
+                      );
+
+                  } finally {
+                      if (input != null) {
                           try {
-                              Intent installIntent =
-                                  KeyChain.createInstallIntent();
-
-                              installIntent.putExtra(
-                                  KeyChain.EXTRA_CERTIFICATE,
-                                  readBytes(uri)
-                              );
-
-                              startActivity(installIntent);
-
-                          } catch (Exception e) {
-                              e.printStackTrace();
+                              input.close();
+                          } catch (Exception ignored) {
                           }
                       }
                   }
               }
 
-              private byte[] readBytes(Uri uri) throws Exception {
-                  java.io.InputStream input =
-                      getContentResolver().openInputStream(uri);
+              private void showError(String message) {
+                  new AlertDialog.Builder(this)
+                      .setTitle("Cert Installer Helper")
+                      .setMessage(message)
+                      .setPositiveButton("OK", null)
+                      .show();
+              }
 
-                  java.io.ByteArrayOutputStream output =
-                      new java.io.ByteArrayOutputStream();
-
-                  byte[] buffer = new byte[4096];
-                  int length;
-
-                  while ((length = input.read(buffer)) != -1) {
-                      output.write(buffer, 0, length);
-                  }
-
-                  input.close();
-
-                  return output.toByteArray();
+              private void showMessage(String message) {
+                  new AlertDialog.Builder(this)
+                      .setTitle("Cert Installer Helper")
+                      .setMessage(message)
+                      .setPositiveButton("OK", null)
+                      .show();
               }
           }
           EOF
