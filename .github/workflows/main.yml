@@ -8,9 +8,11 @@ on:
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -21,7 +23,9 @@ jobs:
           java-version: '11'
 
       - name: Create Android project
+        shell: bash
         run: |
+
           mkdir -p app/src/main/java/com/auri16/certinstallerhelper
           mkdir -p app/src/main/res/values
 
@@ -31,14 +35,6 @@ jobs:
                   google()
                   mavenCentral()
                   gradlePluginPortal()
-              }
-          }
-
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
               }
           }
 
@@ -62,6 +58,7 @@ jobs:
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           android.useAndroidX=false
+          android.enableJetifier=false
           EOF
 
           cat > app/build.gradle <<'EOF'
@@ -80,24 +77,36 @@ jobs:
                   versionName "1.0"
               }
           }
+
+          repositories {
+              google()
+              mavenCentral()
+          }
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:theme="@style/AppTheme"
+                  android:allowBackup="false"
                   android:label="Cert Installer Helper"
-                  android:allowBackup="false">
+                  android:theme="@style/AppTheme">
 
                   <activity
                       android:name=".MainActivity"
-                      android:exported="true">
+                      android:label="Cert Installer Helper">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
@@ -109,6 +118,7 @@ jobs:
 
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <resources>
 
               <style
@@ -148,45 +158,78 @@ jobs:
               public void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setPadding(30, 30, 30, 30);
+                  LinearLayout layout =
+                      new LinearLayout(this);
 
-                  TextView title = new TextView(this);
-                  title.setText("Cert Installer Helper");
+                  layout.setOrientation(
+                      LinearLayout.VERTICAL
+                  );
+
+                  layout.setPadding(
+                      30,
+                      30,
+                      30,
+                      30
+                  );
+
+                  TextView title =
+                      new TextView(this);
+
+                  title.setText(
+                      "Cert Installer Helper"
+                  );
+
                   title.setTextSize(24);
+
                   layout.addView(title);
 
-                  TextView info = new TextView(this);
+                  TextView info =
+                      new TextView(this);
+
                   info.setText(
-                      "Wybierz plik certyfikatu (.der / .crt), " +
-                      "a następnie przekażemy go do systemowego " +
-                      "instalatora Androida."
+                      "Wybierz plik certyfikatu " +
+                      "(.der lub .crt), aby przekazać " +
+                      "go do systemowego instalatora " +
+                      "certyfikatów Androida."
                   );
+
                   info.setTextSize(16);
+
                   layout.addView(info);
 
-                  Button button = new Button(this);
-                  button.setText("WYBIERZ CERTYFIKAT");
+                  Button button =
+                      new Button(this);
+
+                  button.setText(
+                      "WYBIERZ CERTYFIKAT"
+                  );
+
                   layout.addView(button);
 
-                  button.setOnClickListener(new View.OnClickListener() {
-                      @Override
-                      public void onClick(View v) {
-                          Intent intent =
-                              new Intent(Intent.ACTION_GET_CONTENT);
+                  button.setOnClickListener(
+                      new View.OnClickListener() {
 
-                          intent.setType("*/*");
-                          intent.addCategory(
-                              Intent.CATEGORY_OPENABLE
-                          );
+                          @Override
+                          public void onClick(View v) {
 
-                          startActivityForResult(
-                              intent,
-                              PICK_CERTIFICATE
-                          );
+                              Intent intent =
+                                  new Intent(
+                                      Intent.ACTION_GET_CONTENT
+                                  );
+
+                              intent.setType("*/*");
+
+                              intent.addCategory(
+                                  Intent.CATEGORY_OPENABLE
+                              );
+
+                              startActivityForResult(
+                                  intent,
+                                  PICK_CERTIFICATE
+                              );
+                          }
                       }
-                  });
+                  );
 
                   setContentView(layout);
               }
@@ -203,16 +246,19 @@ jobs:
                       data
                   );
 
-                  if (requestCode != PICK_CERTIFICATE ||
+                  if (
+                      requestCode != PICK_CERTIFICATE ||
                       resultCode != RESULT_OK ||
                       data == null ||
-                      data.getData() == null) {
+                      data.getData() == null
+                  ) {
                       return;
                   }
 
                   Uri uri = data.getData();
 
                   try {
+
                       InputStream input =
                           getContentResolver()
                               .openInputStream(uri);
@@ -220,16 +266,26 @@ jobs:
                       ByteArrayOutputStream output =
                           new ByteArrayOutputStream();
 
-                      byte[] buffer = new byte[4096];
+                      byte[] buffer =
+                          new byte[4096];
+
                       int length;
 
-                      while ((length = input.read(buffer)) != -1) {
-                          output.write(buffer, 0, length);
+                      while (
+                          (length =
+                              input.read(buffer)) != -1
+                      ) {
+                          output.write(
+                              buffer,
+                              0,
+                              length
+                          );
                       }
 
                       input.close();
 
-                      byte[] certificate = output.toByteArray();
+                      byte[] certificate =
+                          output.toByteArray();
 
                       Intent installIntent =
                           KeyChain.createInstallIntent();
@@ -239,13 +295,15 @@ jobs:
                           certificate
                       );
 
-                      startActivity(installIntent);
+                      startActivity(
+                          installIntent
+                      );
 
                   } catch (Exception e) {
 
                       Toast.makeText(
                           this,
-                          "Nie udało się odczytać certyfikatu",
+                          "Nie udało się odczytać certyfikatu.",
                           Toast.LENGTH_LONG
                       ).show();
                   }
@@ -253,8 +311,10 @@ jobs:
           }
           EOF
 
-      - name: Download Gradle
+      - name: Download Gradle 6.7.1
+        shell: bash
         run: |
+
           wget -q \
             https://services.gradle.org/distributions/gradle-6.7.1-bin.zip \
             -O gradle.zip
@@ -262,8 +322,20 @@ jobs:
           unzip -q gradle.zip
 
       - name: Build APK
+        shell: bash
         run: |
-          ./gradle-6.7.1/bin/gradle assembleDebug
+
+          ./gradle-6.7.1/bin/gradle \
+            assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Check APK
+        shell: bash
+        run: |
+
+          ls -lh \
+            app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
