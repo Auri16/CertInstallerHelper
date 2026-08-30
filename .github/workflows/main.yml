@@ -1,6 +1,9 @@
 name: Build CertInstallerHelper
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -8,9 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
       - name: Create Android project
         run: |
           mkdir -p app/src/main/java/com/auri16/certinstallerhelper
+          mkdir -p app/src/main/res/values
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -94,15 +107,19 @@ jobs:
           </manifest>
           EOF
 
-          mkdir -p app/src/main/res/values
-
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light">
+
+              <style
+                  name="AppTheme"
+                  parent="android:style/Theme.Material.Light">
+
                   <item name="android:fontFamily">sans</item>
                   <item name="android:colorAccent">#0099CC</item>
+
               </style>
+
           </resources>
           EOF
 
@@ -143,7 +160,8 @@ jobs:
                   TextView info = new TextView(this);
                   info.setText(
                       "Wybierz plik certyfikatu (.der / .crt), " +
-                      "a następnie przekażemy go do systemowego instalatora Androida."
+                      "a następnie przekażemy go do systemowego " +
+                      "instalatora Androida."
                   );
                   info.setTextSize(16);
                   layout.addView(info);
@@ -155,10 +173,18 @@ jobs:
                   button.setOnClickListener(new View.OnClickListener() {
                       @Override
                       public void onClick(View v) {
-                          Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                          Intent intent =
+                              new Intent(Intent.ACTION_GET_CONTENT);
+
                           intent.setType("*/*");
-                          intent.addCategory(Intent.CATEGORY_OPENABLE);
-                          startActivityForResult(intent, PICK_CERTIFICATE);
+                          intent.addCategory(
+                              Intent.CATEGORY_OPENABLE
+                          );
+
+                          startActivityForResult(
+                              intent,
+                              PICK_CERTIFICATE
+                          );
                       }
                   });
 
@@ -167,8 +193,15 @@ jobs:
 
               @Override
               protected void onActivityResult(
-                      int requestCode, int resultCode, Intent data) {
-                  super.onActivityResult(requestCode, resultCode, data);
+                      int requestCode,
+                      int resultCode,
+                      Intent data) {
+
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  );
 
                   if (requestCode != PICK_CERTIFICATE ||
                       resultCode != RESULT_OK ||
@@ -180,8 +213,12 @@ jobs:
                   Uri uri = data.getData();
 
                   try {
-                      InputStream input = getContentResolver().openInputStream(uri);
-                      ByteArrayOutputStream output = new ByteArrayOutputStream();
+                      InputStream input =
+                          getContentResolver()
+                              .openInputStream(uri);
+
+                      ByteArrayOutputStream output =
+                          new ByteArrayOutputStream();
 
                       byte[] buffer = new byte[4096];
                       int length;
@@ -194,7 +231,9 @@ jobs:
 
                       byte[] certificate = output.toByteArray();
 
-                      Intent installIntent = KeyChain.createInstallIntent();
+                      Intent installIntent =
+                          KeyChain.createInstallIntent();
+
                       installIntent.putExtra(
                           KeyChain.EXTRA_CERTIFICATE,
                           certificate
@@ -203,6 +242,7 @@ jobs:
                       startActivity(installIntent);
 
                   } catch (Exception e) {
+
                       Toast.makeText(
                           this,
                           "Nie udało się odczytać certyfikatu",
@@ -213,13 +253,17 @@ jobs:
           }
           EOF
 
-      - name: Build APK
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 6.7.1
+      - name: Download Gradle
+        run: |
+          wget -q \
+            https://services.gradle.org/distributions/gradle-6.7.1-bin.zip \
+            -O gradle.zip
 
-      - name: Assemble APK
-        run: gradle assembleDebug
+          unzip -q gradle.zip
+
+      - name: Build APK
+        run: |
+          ./gradle-6.7.1/bin/gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
